@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Money Tracker</title>
+<style>
+  :root {
+    --bg: #f6f7f4;
+    --surface: #ffffff;
+    --text: #1d2a24;
+    --muted: #6b7a72;
+    --line: #dfe4df;
+    --ok: #1e7d4f;
+    --near: #b7791f;
+    --over: #c0392b;
+    --accent: #1f4d3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141a17;
+      --surface: #1c2420;
+      --text: #e8efe9;
+      --muted: #93a49a;
+      --line: #2e3a34;
+      --ok: #3fbf84;
+      --near: #e0a63a;
+      --over: #ef6b5b;
+      --accent: #3fbf84;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.45;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.6rem; margin: 0 0 16px; }
+  h2 { font-size: 1.05rem; margin: 0 0 12px; }
+  section {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
+  input, select, button {
+    font: inherit;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    width: 100%;
+  }
+  input:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  button.primary {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  @media (prefers-color-scheme: dark) { button.primary { color: #0e1512; } }
+  button.small {
+    width: auto;
+    background: transparent;
+    color: var(--muted);
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .full { grid-column: 1 / -1; }
+
+  /* ---- The circle ---- */
+  .ring-wrap { display: flex; flex-direction: column; align-items: center; }
+  .ring { position: relative; width: 240px; height: 240px; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring .track { fill: none; stroke: var(--line); stroke-width: 18; }
+  .ring .progress {
+    fill: none;
+    stroke: var(--ok);
+    stroke-width: 18;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.6s ease, stroke 0.3s ease;
+  }
+  .ring .progress.near { stroke: var(--near); }
+  .ring .progress.over { stroke: var(--over); }
+  .ring-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .ring-center .big { font-size: 1.9rem; font-weight: 700; }
+  .ring-center .small-text { font-size: 0.85rem; color: var(--muted); }
+  .ring-center .big.over { color: var(--over); }
+  #message { margin: 12px 0 0; font-weight: 600; text-align: center; }
+  #message.ok { color: var(--ok); }
+  #message.near { color: var(--near); }
+  #message.over { color: var(--over); }
+  #message.no_limit { color: var(--muted); font-weight: 400; }
+
+  .totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .totals div { padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
+  .num { font-size: 1.2rem; font-weight: 700; }
+  .debit { color: var(--over); }
+  .credit { color: var(--ok); }
+  .row {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line);
+  }
+  .row:last-child { border-bottom: none; }
+  .row small { color: var(--muted); display: block; }
+  .empty { color: var(--muted); margin: 0; }
+  #formError { color: var(--over); margin: 8px 0 0; }
+  @media (max-width: 480px) { .totals { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .ring .progress { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Money Tracker</h1>
+
+  <section>
+    <h2>Today</h2>
+    <div class="ring-wrap">
+      <div class="ring">
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <circle class="track" cx="100" cy="100" r="85"></circle>
+          <circle id="progress" class="progress" cx="100" cy="100" r="85"></circle>
+        </svg>
+        <div class="ring-center">
+          <div id="ringBig" class="big">₹0</div>
+          <div id="ringSmall" class="small-text">left today</div>
+          <div id="ringSpent" class="small-text"></div>
+        </div>
+      </div>
+      <p id="message" role="status" aria-live="polite"></p>
+    </div>
+    <div style="margin-top:16px">
+      <label for="limit">Daily limit (₹)</label>
+      <input id="limit" type="number" min="0" step="1" placeholder="e.g. 500">
+    </div>
+  </section>
+
+  <section>
+    <h2>Add entry</h2>
+    <div class="grid">
+      <div>
+        <label for="amount">Amount (₹)</label>
+        <input id="amount" type="number" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div>
+        <label for="type">Type</label>
+        <select id="type">
+          <option value="debit">Debit (spent)</option>
+          <option value="credit">Credit (received)</option>
+        </select>
+      </div>
+      <div>
+        <label for="category">Category</label>
+        <select id="category">
+          {% for c in categories %}<option>{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="full">
+        <label for="note">Note (optional)</label>
+        <input id="note" type="text" placeholder="e.g. lunch">
+      </div>
+      <div class="full">
+        <button id="addBtn" class="primary" type="button">Add entry</button>
+      </div>
+    </div>
+    <p id="formError"></p>
+  </section>
+
+  <section>
+    <h2>Totals (all time)</h2>
+    <div class="totals">
+      <div><label>Debited</label><div id="totalDebit" class="num debit">₹0</div></div>
+      <div><label>Credited</label><div id="totalCredit" class="num credit">₹0</div></div>
+      <div><label>Balance</label><div id="balance" class="num">₹0</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Spending by category</h2>
+    <div id="categoryList"></div>
+  </section>
+
+  <section>
+    <h2>History</h2>
+    <div id="history"></div>
+  </section>
+</main>
+
+<script>
+  // ---- Circle maths ----
+  const RADIUS = 85;
+  const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+  const ring = document.getElementById("progress");
+  ring.style.strokeDasharray = CIRCUMFERENCE;
+  ring.style.strokeDashoffset = CIRCUMFERENCE;
+
+  function money(n) {
+    return "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // ---- Talk to the API ----
+  async function api(url, options) {
+    const res = await fetch(url, options);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Something went wrong.");
+    return data;
+  }
+
+  function drawRing(s) {
+    const percent = Math.min(s.percent_used, 100);
+    ring.style.strokeDashoffset = CIRCUMFERENCE * (1 - percent / 100);
+    ring.setAttribute("class", "progress " + (s.status === "over" ? "over" : s.status === "near" ? "near" : ""));
+
+    const big = document.getElementById("ringBig");
+    const small = document.getElementById("ringSmall");
+    const spent = document.getElementById("ringSpent");
+    const message = document.getElementById("message");
+    message.className = s.status;
+    big.className = "big";
+
+    if (s.status === "no_limit") {
+      big.textContent = money(s.spent_today);
+      small.textContent = "spent today";
+      spent.textContent = "";
+      message.textContent = "Set a daily limit to see the circle fill.";
+      return;
+    }
+
+    spent.textContent = money(s.spent_today) + " of " + money(s.daily_limit);
+
+    if (s.status === "over") {
+      big.textContent = money(Math.abs(s.left_today));
+      big.className = "big over";
+      small.textContent = "over the limit";
+      message.textContent = "Stop spending. You are over today's limit.";
+    } else {
+      big.textContent = money(s.left_today);
+      small.textContent = "left today";
+      message.textContent = s.status === "near"
+        ? "Careful. You are close to today's limit."
+        : "You are within your limit.";
+    }
+  }
+
+  function drawTotals(s) {
+    document.getElementById("totalDebit").textContent = money(s.total_debit);
+    document.getElementById("totalCredit").textContent = money(s.total_credit);
+    document.getElementById("balance").textContent = money(s.balance);
+
+    const box = document.getElementById("categoryList");
+    if (s.by_category.length === 0) {
+      box.innerHTML = '<p class="empty">No spending yet.</p>';
+      return;
+    }
+    box.innerHTML = s.by_category.map(function (c) {
+      return '<div class="row"><span>' + escapeHtml(c.category) + '</span><strong>' + money(c.total) + '</strong></div>';
+    }).join("");
+  }
+
+  function drawHistory(list) {
+    const box = document.getElementById("history");
+    if (list.length === 0) {
+      box.innerHTML = '<p class="empty">No entries yet. Add your first one above.</p>';
+      return;
+    }
+    box.innerHTML = list.map(function (e) {
+      const sign = e.type === "debit" ? "−" : "+";
+      const note = e.note ? escapeHtml(e.note) : "";
+      return '<div class="row">' +
+        '<div><strong>' + escapeHtml(e.category) + '</strong>' + (note ? '<small>' + note + '</small>' : '') + '</div>' +
+        '<div><span class="' + e.type + '"><strong>' + sign + money(e.amount) + '</strong></span> ' +
+        '<button class="small" data-id="' + e.id + '" type="button">Delete</button></div>' +
+        '</div>';
+    }).join("");
+  }
+
+  async function refresh() {
+    try {
+      const results = await Promise.all([api("/api/summary"), api("/api/entries")]);
+      drawRing(results[0]);
+      drawTotals(results[0]);
+      drawHistory(results[1]);
+    } catch (err) {
+      document.getElementById("formError").textContent = err.message;
+    }
+  }
+
+  // ---- Actions ----
+  async function addEntry() {
+    const error = document.getElementById("formError");
+    error.textContent = "";
+    try {
+      await api("/api/entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: document.getElementById("amount").value,
+          type: document.getElementById("type").value,
+          category: document.getElementById("category").value,
+          note: document.getElementById("note").value
+        })
+      });
+      document.getElementById("amount").value = "";
+      document.getElementById("note").value = "";
+      refresh();
+    } catch (err) {
+      error.textContent = err.message;
+    }
+  }
+
+  async function saveLimit() {
+    try {
+      await api("/api/limit", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ daily_limit: document.getElementById("limit").value || 0 })
+      });
+      refresh();
+    } catch (err) {
+      document.getElementById("formError").textContent = err.message;
+    }
+  }
+
+  async function deleteEntry(id) {
+    try {
+      await api("/api/entries/" + id, { method: "DELETE" });
+      refresh();
+    } catch (err) {
+      document.getElementById("formError").textContent = err.message;
+    }
+  }
+
+  document.getElementById("addBtn").addEventListener("click", addEntry);
+  document.getElementById("limit").addEventListener("change", saveLimit);
+  document.getElementById("history").addEventListener("click", function (ev) {
+    const id = ev.target.getAttribute("data-id");
+    if (id) deleteEntry(id);
+  });
+
+  async function start() {
+    try {
+      const lim = await api("/api/limit");
+      if (lim.daily_limit) document.getElementById("limit").value = lim.daily_limit;
+    } catch (err) { /* ignore, refresh will show errors */ }
+    refresh();
+  }
+  start();
+
+  // Refresh every minute so the circle resets on its own when a new day starts.
+  setInterval(refresh, 60 * 1000);
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) refresh();
+  });
+</script>
+</body>
+</html>
